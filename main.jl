@@ -16,7 +16,7 @@ n_pad_pixels = 128
 pixel_size   = 7.5e-7
 
 n_prebleach_frames    = 10
-n_bleach_frames       = 1
+n_bleach_frames       = 4
 n_postbleach_frames   = 100
 n_frames              = n_prebleach_frames + n_postbleach_frames
 n_elements            = n_pixels + 2*n_pad_pixels

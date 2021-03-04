@@ -52,7 +52,7 @@ function run(experiment::ExperimentParams, bath::BathParams, rng)
 
     # Remove bleach
     bleach = (n_prebleach_frames+1):(n_prebleach_frames+n_bleach_frames)
-    c = c[:, :,  1:end .!= bleach]
+    # c = c[:, :,  1:end .!= bleach]
 
     # Add noise
     c = add_noise(c, a, b, rng)
