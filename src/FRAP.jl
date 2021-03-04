@@ -2,8 +2,8 @@
 module FRAP
     include("concentration.jl")
     include("mask.jl")
-    include("core.jl")
     include("params.jl")
+    include("core.jl")
 
     export run
     export concentration
