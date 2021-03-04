@@ -62,12 +62,12 @@ function run(experiment::ExperimentParams, bath::BathParams, rng)
 end
 
 # Evolves an array slice from start to end
-function evolve!(mobile::AbstractArray{T, 3}, 
-                immobile::AbstractArray{T, 3},
-                ξ²::AbstractArray{T, 2},
+function evolve!(mobile::Array{T, 3}, 
+                immobile::Array{T, 3},
+                ξ²::Array{T, 2},
                 D::T,
                 δt::T,
-                masks::AbstractArray{AbstractArray{T, 2}, 1}, frames::UnitRange{S}) where {T<:Real, S<:Integer}
+                masks::Array{Array{T, 2}, 1}, frames::UnitRange{S}) where {T<:Real, S<:Integer}
 
     
     # Initial concentration before diffusion
@@ -105,7 +105,7 @@ end
 
 # Performs ordinary linear diffusion
 # Dispatch this to add binding or other effects
-function diffuse!(c::AbstractArray{T, 2}, ξ²::AbstractArray{T, 2}, D::T, δt::T) where {T<:Real}
+function diffuse!(c::Array{T, 2}, ξ²::Array{T, 2}, D::T, δt::T) where {T<:Real}
 
     dims = [1, 2]
 
