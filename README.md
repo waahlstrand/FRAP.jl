@@ -1,23 +1,24 @@
 # FRAP.jl
 Pixel-based FRAP simulation of diffusion (and in the future) binding dynamics.
 
-## Example
-Run 
+## Installation
+Clone the repository
+```bash
+git clone https://github.com/waahlstrand/FRAP.jl
+```
+and activate it in the package manager ``Pkg``. On Linux:
+```sh
+cd FRAP.jl
+julia
+```
 ```julia
-julia main.jl
+julia> ]
+pkg> activate .
+(FRAP) pkg> instantiate
 ```
-for a sample FRAP simulation.
-
-## Dependencies
+You can now import the FRAP tools:
+```julia
+julia> import FRAP
 ```
-FFTW
-CUDA
-BenchmarkTools
-Revise
-Plots
-Parameters
-YAML
-```
-
 ## Authors
 Victor Wåhlstrand Skärström & Magnus Röding

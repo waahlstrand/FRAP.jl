@@ -1,5 +1,4 @@
 # using FFTW, LinearAlgebra
-using LinearAlgebra
 using Flux, CUDA, CUDA.CUFFT, LinearAlgebra
 
 function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T<:Real}

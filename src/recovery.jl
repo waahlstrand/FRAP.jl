@@ -1,6 +1,5 @@
-using Flux, CUDA, CUDA.CUFFT
+using Flux
 using Statistics
-using Plots
 
 function recovery_curve(c::AbstractArray{T, 3}, bath::BathParams{T}) where {T<:Real}
 
