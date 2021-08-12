@@ -1,0 +1,21 @@
+experiment:
+  initial concentration: 1.0
+  mobile fraction: 1.0
+  diffusion coefficient: 0.5e-10
+  timestep: 0.1
+  bleach: 0.6
+  imaging bleach: 1.0
+  gamma: 0.0
+  constant variance: 0.2
+  linear variance: 0.0
+
+bath: 
+  number of pixels: 256
+  number of pad pixels: 128
+  pixel size: 7.5e-7
+  number of prebleach frames: 10
+  number of bleach frames: 4
+  number of postbleach frames: 100
+  x center: 128
+  y center: 128 
+  radius: 1.5e-5

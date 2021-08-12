@@ -11,8 +11,12 @@ for a sample FRAP simulation.
 ## Dependencies
 ```
 FFTW
-ImageFiltering
-Flux
+CUDA
+BenchmarkTools
+Revise
+Plots
+Parameters
+YAML
 ```
 
 ## Authors

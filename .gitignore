@@ -25,3 +25,5 @@ Manifest.toml
 
 # Logs
 *.log
+create_bleach_mask.jl
+create_bleach_mask_rect.jl

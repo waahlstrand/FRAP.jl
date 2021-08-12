@@ -1,14 +1,11 @@
+include(joinpath("src", "FRAP.jl"))
+
 # Packages 
 using Flux
 using Revise
 using Random
 using BenchmarkTools
 using Plots
-theme(:solarized_light)
-
-includet(joinpath("src", "FRAP.jl"))
-import .FRAP
-
 
 function main()
 
@@ -47,42 +44,32 @@ function main()
     γ::Float32 = 0.0
     a::Float32 = 0.02
     b::Float32 = 0.0
+
     #############################################
     # Run the experiment
 
-    experiment  = FRAP.ExperimentParams(pixel_size; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b)
-    bath        = FRAP.BathParams(x, y, r; n_pixels, n_pad_pixels, pixel_size, 
-                                n_prebleach_frames, n_bleach_frames, n_postbleach_frames, 
+    experiment  = FRAP.ExperimentParams(pixel_size; c₀=c₀, ϕₘ=ϕₘ, D=D_SI, δt=δt, α=α, β=β, γ=γ, a=a, b=b)
+    bath        = FRAP.BathParams(x, y, r; 
+                                  n_pixels=n_pixels, 
+                                  n_pad_pixels=n_pad_pixels, 
+                                  pixel_size=pixel_size, 
+                                  n_prebleach_frames=n_prebleach_frames,
+                                  n_bleach_frames=n_bleach_frames,
+                                  n_postbleach_frames=n_postbleach_frames
                                 )
 
-    # Test the bleach mask creation
-    # @benchmark FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI)
 
-    # Run FRAP
     c = FRAP.run(experiment, bath, rng)
+    c = c |> cpu
 
-    # Calculate recovery curve
-    rc = FRAP.recovery_curve(c, bath)
-
-    # Calculate the residuals
-    rc = rc |> cpu
-    c  = c |> gpu
-    residual  = FRAP.residual(c, experiment, bath, rng)
-    # plot(1:n_frames, rc)
-    histogram(residual)
-    
-
-    # @benchmark FRAP.run($experiment, $bath, $rng)
     #############################################
     # Plot the experiment
-    # c = c |> cpu
-    # @gif for i in 1:size(c, 3)
-    #     heatmap(c[:,:,i], clim=(0,1), aspect_ratio=:equal)
-    # end
 
+    theme(:solarized_light)
+
+    @gif for i in 1:size(c, 3)
+        heatmap(c[:,:,i], clim=(0,1), aspect_ratio=:equal)
+    end
 end
 
-main()
-
-# @profview main()
 

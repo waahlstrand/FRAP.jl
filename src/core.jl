@@ -1,7 +1,8 @@
-using FFTW: fft, ifft, ifftshift
+# using FFTW, LinearAlgebra
+using LinearAlgebra
+using Flux, CUDA, CUDA.CUFFT, LinearAlgebra
 
-
-function run(experiment::ExperimentParams, bath::BathParams, rng)
+function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T<:Real}
 
 
     # Unload all parameters
@@ -24,15 +25,34 @@ function run(experiment::ExperimentParams, bath::BathParams, rng)
     dims = (bath.n_elements, bath.n_elements, bath.n_frames)
 
     # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels)
-    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI)
+    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> gpu
+    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI) |> gpu
 
     slices = (1:n_prebleach_frames,
               n_prebleach_frames:n_prebleach_frames+n_bleach_frames,
               n_prebleach_frames+n_bleach_frames:n_frames-1)
-
+    
     # Initialize a concentration
-    cs = concentration(c₀, ϕₘ, dims)
+    cs = concentration(c₀, ϕₘ, dims) |> gpu
+
+    # Calculate the dimensions needed for
+    # the real FFT
+    ds = (div(size(ξ², 1),2)+1,size(ξ², 2))
+
+    # Pre-allocate the FFT output
+    ĉ  = zeros(Complex{T}, ds) |> gpu
+
+    # Plan ffts for performance
+    # Using real FFTs approximately halfs 
+    # memory and time
+    plan     = zeros(size(ξ²)) |> gpu
+    inv_plan = zeros(Complex{T},ds) |> gpu
+    P = plan_rfft(plan) 
+    P̂ = plan_irfft(inv_plan, size(plan, 1)) 
+
+    # Calculate the FFT kernel step
+    ξ² = ξ²[1:ds[1], 1:ds[2]] 
+    A = step(ξ², D, δt) |> gpu
 
     # Sets the configuration of bleaching and number of frames for bleaching
     stages = (
@@ -43,7 +63,7 @@ function run(experiment::ExperimentParams, bath::BathParams, rng)
 
     for stage in stages
 
-        cs = evolve!(cs..., ξ², D, δt, stage...)
+        evolve!(cs..., A, stage..., ĉ, P, P̂)
 
     end
 
@@ -52,35 +72,38 @@ function run(experiment::ExperimentParams, bath::BathParams, rng)
 
     # Remove bleach
     bleach = (n_prebleach_frames+1):(n_prebleach_frames+n_bleach_frames)
-    # c = c[:, :,  1:end .!= bleach]
+    c = c[:, :,  setdiff(1:end, bleach)]
 
     # Add noise
-    c = add_noise(c, a, b, rng)
+    c .= add_noise(c, a, b, rng)
 
     return c
     
 end
 
-# Evolves an array slice from start to end
-function evolve!(mobile::Array{T, 3}, 
-                immobile::Array{T, 3},
-                ξ²::Array{T, 2},
-                D::T,
-                δt::T,
-                masks::Array{Array{T, 2}, 1}, frames::UnitRange{S}) where {T<:Real, S<:Integer}
+function add_noise(c, a, b, rng)
 
-    
+    gaussian = randn(rng, size(c)) |> gpu
+
+    return c .+ sqrt.(a.+b.*c).*gaussian
+
+end
+
+function evolve!(mobile::AbstractArray{T, 3}, 
+    immobile::AbstractArray{T, 3},
+    A::AbstractArray{T, 2},
+    masks::Array{<:AbstractArray{T, 2}, 1}, frames::UnitRange{S}, ĉ, P, P̂) where {T<:Real, S<:Integer}
+
+
     # Initial concentration before diffusion
     c_mobile   = mobile[:, :, first(frames)]
     c_immobile = immobile[:, :, first(frames)]
-
-    # n_frames   = size(c_mobile, 3)
 
     # Diffuse for n_frames timesteps
     for frame in frames
 
         # Make one step of length δt
-        c_mobile .= diffuse!(c_mobile, ξ², D, δt)
+        c_mobile .= diffuse!(A, c_mobile, ĉ, P, P̂)
 
         # Apply imaging bleach masks
         c_mobile    .= bleach!(c_mobile, masks)
@@ -89,30 +112,26 @@ function evolve!(mobile::Array{T, 3},
         # Save time evolution
         mobile[:, :, frame+1]   = c_mobile
         immobile[:, :, frame+1] = c_immobile
- 
+
     end
 
     return (mobile, immobile)
 
+end
+
+
+function diffuse!(A::AbstractArray{T, 2}, c, ĉ, P, P̂) where {T<:Real}
+
+    mul!(ĉ, P, c)   # FFT
+    ĉ .= A .* ĉ     # Time step in Fourier domain
+    mul!(c, P̂, ĉ)   # Inverse FFT
+
+    return c 
+
+end
+
+function step(ξ²::AbstractArray{T, 2}, D::T, δt::T,) where {T<:Real}
+
+    return exp.(-D * ξ² * δt)
     
-end
-
-function add_noise(c, a, b, rng)
-
-    return c .+ sqrt.(a.+b.*c).*randn(rng, size(c))
-
-end
-
-# Performs ordinary linear diffusion
-# Dispatch this to add binding or other effects
-function diffuse!(c::Array{T, 2}, ξ²::Array{T, 2}, D::T, δt::T) where {T<:Real}
-
-    dims = [1, 2]
-
-    ĉ = fft(c, dims)
-    ĉ = exp.(-D .* ξ² .* δt) .* ĉ
-    c = abs.(ifft(ĉ, dims))
-
-    return c
-
 end

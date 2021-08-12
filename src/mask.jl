@@ -1,21 +1,19 @@
-using ImageFiltering: imfilter!, imfilter, Kernel, centered
-using Flux: SamePad, MeanPool
+using FFTW:ifftshift
 
+abstract type AbstractROI{T <: Real} end
 
-abstract type AbstractROI{T<:Real, S<:Integer} end
+struct CircleROI{T} <: AbstractROI{T}
 
-struct CircleROI{T, S} <: AbstractROI{T, S}
-
-    x::S
-    y::S
+    x_center::T
+    y_center::T
     r::T
 
 end 
 
-struct RectangleROI{T, S} <: AbstractROI{T, S}
+struct RectangleROI{T} <: AbstractROI{T}
 
-    x::S
-    y::S
+    x_center::T
+    y_center::T
     lx::T
     ly::T
 
@@ -24,19 +22,19 @@ end
 # Not implemented
 # struct ArbitraryROI <: AbstractROI end
 
-function create_bleach_region(x::S, y::S, r::T) where {T<:Real, S<:Integer}
+function create_bleach_region(x_center::T, y_center::T, r::T) where {T <: Real}
 
-    return CircleROI(x, y, r)
+    return CircleROI(x_center, y_center, r)
 
 end
 
-function create_bleach_region(x::T, y::T, lx::T, ly::T) where {T<:Real}
+function create_bleach_region(x_center::T, y_center::T, lx::T, ly::T) where {T <: Real}
 
-    return RectangleROI(x, y, lx, ly)
+    return RectangleROI(x_center, y_center, lx, ly)
     
 end
 
-function bleach!(c::AbstractArray{Float64, 2}, masks::Array)
+function bleach!(c::AbstractArray{T,2}, masks::Array{<:AbstractArray{T,2}}) where {T <: Real}
     for mask in masks
         c = c .* mask
     end
@@ -45,18 +43,215 @@ function bleach!(c::AbstractArray{Float64, 2}, masks::Array)
 end
 
 
+function create_mask(n_pixels::S, 
+                     n_pad_pixels::S,
+                     ROI::CircleROI; type=Float32) where {S <: Integer}
+    n_elements = n_pixels + 2 * n_pad_pixels
+
+    mask = zeros(type, (n_elements, n_elements))
+                 
+    x_center = ROI.x_center
+    y_center = ROI.y_center
+    r        = ROI.r
+                 
+    pixels = 0.5:1:(n_elements - 0.5)
+                 
+                 
+    r_unit_pixel = 1 / sqrt(2)
+                 
+    for (j, y) in enumerate(pixels)
+        for (i, x) in enumerate(pixels)
+                 
+            inside_circle   = ( x - x_center )^2 + ( y - y_center )^2 <= (r - r_unit_pixel)^2
+            # outside_circle  = ( x - x_center )^2 + ( y - y_center )^2 >= (r + r_unit_pixel)^2
+                 
+            if inside_circle        # clearly inside circle
+                 
+                mask[i, j] = 1
+                 
+            end
+        end
+    end
+                 
+    return mask
+                 
+
+end
 
 
-function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {T<:Real, S<:Integer}
+function create_mask(n_pixels::S, 
+                     n_pad_pixels::S,
+                     ROI::RectangleROI; type=Float32) where {S <: Integer}
 
-    mask    = ones((n_pixels + 2*n_pad_pixels, n_pixels + 2*n_pad_pixels))
-    mask[n_pad_pixels+1:end-n_pad_pixels, n_pad_pixels+1:end-n_pad_pixels] .= β
+    n_elements = n_pixels + 2 * n_pad_pixels
+
+    mask = zeros(type, (n_elements, n_elements))
+                 
+    x_center = ROI.x_center
+    y_center = ROI.y_center
+    lx        = ROI.lx
+    ly        = ROI.ly
+
+    pixels = 0.5:1:(n_elements - 0.5)
+
+    r_unit_pixel = 1 / sqrt(2)
+
+    for (j, y) in enumerate(pixels)
+        for (i, x) in enumerate(pixels)
+
+            inside_rectangle   = (x >=  x_center - 0.5 * lx + 1) & (x <=  x_center + 0.5 * lx - 1) & (y >=  y_center - 0.5 * ly + 1) & (y <=  y_center + 0.5 * ly - 1)
+            # outside_rectangle  = (x >=  x_center - 0.5 * lx - 1) & (x <=  x_center + 0.5 * lx + 1) & (y >=  y_center - 0.5 * ly - 1) & (y <=  y_center + 0.5 * ly + 1)
+
+            if inside_rectangle        # clearly inside
+                 
+                mask[i, j] = 1
+                 
+            end
+        end
+    end
+                 
+    return mask
+                 
+
+end
+
+
+
+
+
+function create_bleach_mask(α::T, 
+                            γ::T, 
+                            n_pixels::S, 
+                            n_pad_pixels::S, 
+                            ROI::CircleROI{T}; 
+                            subsampling_factor=15) where {T <: Real,S <: Integer}
+    
+    n_elements = n_pixels + 2 * n_pad_pixels
+
+    mask = ones(T, (n_elements, n_elements))
+
+    x_center = ROI.x_center
+    y_center = ROI.y_center
+    r        = ROI.r
+
+    pixels = 0.5:1:(n_elements - 0.5)
+
+    sub_pixels = range((1 / (2 * subsampling_factor)) - 0.5, 
+                        step=1 / subsampling_factor, 
+                        length=(subsampling_factor))
+
+    r_unit_pixel = 1 / sqrt(2)
+
+    for (j, y) in enumerate(pixels)
+        for (i, x) in enumerate(pixels)
+
+            inside_circle   = ( x - x_center )^2 + ( y - y_center )^2 <= (r - r_unit_pixel)^2
+            outside_circle  = ( x - x_center )^2 + ( y - y_center )^2 >= (r + r_unit_pixel)^2
+
+            if inside_circle        # clearly inside circle
+
+                mask[i, j] = α
+
+            elseif !outside_circle  # Near or on the edge of the bleach region.          
+ 
+                fraction_of_pixel_inside = 0.0
+
+                for x_sub in sub_pixels
+
+                    for y_sub in sub_pixels
+
+                        if ( x + x_sub - x_center )^2 + ( y + y_sub - y_center )^2 <= r^2
+                            fraction_of_pixel_inside += 1.0
+                        end
+
+                    end
+
+                end
+
+                fraction_of_pixel_inside /= subsampling_factor^2
+                mask[i, j] = fraction_of_pixel_inside * α + (1 - fraction_of_pixel_inside) * 1.0
+
+            end
+        end
+    end
 
     return mask
 
 end
 
-function create_bleach_mask(α::T, γ::T, n_pixels::S, n_pad_pixels::S, bleach_region::AbstractROI{T, S}) where {T<:Real, S<:Integer}
+function create_bleach_mask(α::T, 
+                            γ::T, 
+                            n_pixels::S, 
+                            n_pad_pixels::S, 
+                            ROI::RectangleROI{T}; 
+                            subsampling_factor=15) where {T <: Real,S <: Integer}
+    
+    n_elements = n_pixels + 2 * n_pad_pixels
+
+    mask = ones(T, (n_elements, n_elements))
+
+    x_center = ROI.x_center
+    y_center = ROI.y_center
+    lx        = ROI.lx
+    ly        = ROI.ly
+
+    pixels = 0.5:1:(n_elements - 0.5)
+
+    sub_pixels = range((1 / (2 * subsampling_factor)) - 0.5, 
+                        step=1 / subsampling_factor, 
+                        length=(subsampling_factor))
+
+    r_unit_pixel = 1 / sqrt(2)
+
+    for (j, y) in enumerate(pixels)
+        for (i, x) in enumerate(pixels)
+
+            inside_rectangle   = (x >=  x_center - 0.5 * lx + 1) & (x <=  x_center + 0.5 * lx - 1) & (y >=  y_center - 0.5 * ly + 1) & (y <=  y_center + 0.5 * ly - 1)
+            outside_rectangle  = (x >=  x_center - 0.5 * lx - 1) & (x <=  x_center + 0.5 * lx + 1) & (y >=  y_center - 0.5 * ly - 1) & (y <=  y_center + 0.5 * ly + 1)
+
+            if inside_rectangle        # clearly inside
+
+                mask[i, j] = α
+
+            elseif !outside_rectangle  # Near or on the edge of the bleach region.          
+ 
+                fraction_of_pixel_inside = 0.0
+
+                for x_sub in sub_pixels
+
+                    for y_sub in sub_pixels
+
+                        if (x_sub >=  x_center - 0.5 * lx) & (x_sub <=  x_center + 0.5 * lx ) & (y_sub >=  y_center - 0.5 * ly) & (y_sub <=  y_center + 0.5 * ly)
+                            fraction_of_pixel_inside += 1.0
+                        end
+
+                    end
+
+                end
+
+                fraction_of_pixel_inside /= subsampling_factor^2
+                mask[i, j] = fraction_of_pixel_inside * α + (1 - fraction_of_pixel_inside) * 1.0
+
+            end
+        end
+    end
+
+    return mask
+
+end
+
+
+
+function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {T <: Real,S <: Integer}
+
+    mask    = ones((n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
+    mask[n_pad_pixels + 1:end - n_pad_pixels, n_pad_pixels + 1:end - n_pad_pixels] .= β
+
+    return mask
+
+end
+
+function create_bleach_mask_legacy(α::T, γ::T, n_pixels::S, n_pad_pixels::S, bleach_region::AbstractROI{T}) where {T <: Real,S <: Integer}
 
     upsampling_factor = 15; # Needs to be a multiple of 3 due the 'box' method in imresize.
 
@@ -72,137 +267,16 @@ function create_bleach_mask(α::T, γ::T, n_pixels::S, n_pad_pixels::S, bleach_r
     # Downsample mask by the upsampling factor
     bleach_region_mask = downsample_mask!(bleach_region_mask, upsampling_factor) 
 
-    mask    = ones((n_pixels + 2*n_pad_pixels, n_pixels + 2*n_pad_pixels))
-    mask[n_pad_pixels+bounds.lb_x:n_pad_pixels+bounds.ub_x, n_pad_pixels+bounds.lb_y:n_pad_pixels+bounds.ub_y] .= bleach_region_mask
+    mask    = ones((n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
+    mask[n_pad_pixels + bounds.lb_x:n_pad_pixels + bounds.ub_x, n_pad_pixels + bounds.lb_y:n_pad_pixels + bounds.ub_y] .= bleach_region_mask
 
     return mask
 
 end
 
-function filter_mask!(x::AbstractArray{Float64, 2}, γ::Float64, upsampling_factor::Int64)
-
-    # Define a covariance kernel
-    σ = upsampling_factor * γ
-    ℓ = convert(Int64, 4 * ceil(2 * upsampling_factor * γ) + 1 )
-
-    #kernel = centered(Kernel.gaussian((σ,), (ℓ,)))
-
-    #small_mask = imfilter(small_mask, kernel, "replicate")
-end
-
-function downsample_mask!(x::AbstractArray{T,2}, k::S) where {T<:Real, S<:Integer}
-
-    dims = size(x)
-    target_dims = size(x) .÷ k
-
-    # Initialize a convolution with an averaging kernel
-    # Downside: Precompilation of flux is incredibly slow. Consider finding alternatives.
-    pool = MeanPool((k, k); pad=0, stride=(k, k))
-
-    # Expand size of image to 4D
-    x = reshape(x, (dims..., 1, 1))
-
-    # Downsample
-    x = pool(x)
-
-    # Squeeze dimensions
-    x = reshape(x, target_dims)
-
-    return x
-    
-end
-
-function get_bleach_region_mask(bounds::NamedTuple{(:lb_x, :lb_y, :ub_x, :ub_y),NTuple{4,S}}, 
-                                bleach_region::AbstractROI{T, S}, 
-                                α::T,
-                                upsampling_factor::S) where {T<:Real, S<:Integer}
-
-    x = range(bounds.lb_x-1, stop=bounds.ub_x, length=upsampling_factor*(bounds.ub_x-bounds.lb_x+1))
-    y = range(bounds.lb_y-1, stop=bounds.ub_y, length=upsampling_factor*(bounds.ub_y-bounds.lb_y+1))
-
-    X, Y = meshgrid(x, y)
-
-    inds = get_bleach_region_index(bleach_region, X, Y)
-
-    mask = ones(size(X))
-    mask[inds] .= α
-
-    return mask
-
-end
-
-function get_bounds(bleach_region::RectangleROI{T, S}, γ::T) where {T<:Real, S<:Integer}
-
-    factor = 8
-
-    lb_x = floor(0.5 + bleach_region.x - 0.5 * bleach_region.lx - factor*γ)
-    ub_x = ceil(0.5 + bleach_region.x + 0.5 * bleach_region.lx + factor*γ)
-    lb_y = floor(0.5 + bleach_region.y - 0.5 * bleach_region.ly - factor*γ)
-    ub_y = ceil(0.5 + bleach_region.y + 0.5 * bleach_region.ly + factor*γ)
 
 
-    lb_x, lb_y, ub_x, ub_y = rescale_bounds(lb_x, lb_y, ub_x, ub_y)
-
-    return (lb_x=lb_x, lb_y=lb_y, ub_x=ub_x, ub_y=ub_y)
-
-end
-
-
-
-function get_bounds(bleach_region::CircleROI{T, S}, γ::T) where {T<:Real, S<:Integer}
-
-    factor = 8
-
-    lb_x = floor(0.5 + bleach_region.x - bleach_region.r - factor*γ)
-    ub_x = ceil(0.5 + bleach_region.x + bleach_region.r + factor*γ)
-    lb_y = floor(0.5 + bleach_region.y - bleach_region.r - factor*γ)
-    ub_y = ceil(0.5 + bleach_region.y + bleach_region.r + factor*γ)
-
-    lb_x, lb_y, ub_x, ub_y = rescale_bounds(lb_x, lb_y, ub_x, ub_y)
-
-    return (lb_x=lb_x, lb_y=lb_y, ub_x=ub_x, ub_y=ub_y)
-
-end
-
-
-function rescale_bounds(lb_x::T, lb_y::T, ub_x::T, ub_y::T) where {T<:Real}
-    
-    # Bounds must be cast to integers
-    lb_x, lb_y, ub_x, ub_y = map(x -> convert(Int64, x), (lb_x, lb_y, ub_x, ub_y))
-
-    lb_x -= 1
-    lb_y -= 1
-    ub_x += 1
-    ub_y += 1
-
-    return (lb_x=lb_x, lb_y=lb_y, ub_x=ub_x, ub_y=ub_y)
-
-end
-
-
-function get_bleach_region_index(bleach_region::RectangleROI{T, S}, X::AbstractArray{T, 2}, Y::AbstractArray{S, 2}) where {T<:Real, S<:Integer}
-
-    # Make a rectangular cutout of a matrix
-    idx_bleach = ((X .>= bleach_region.x .- 0.5 .* bleach_region.lx) .&
-                  (X .<= bleach_region.x .+ 0.5 .* bleach_region.lx) .&
-                  (Y .>= bleach_region.y .- 0.5 .* bleach_region.ly) .&
-                  (Y .<= bleach_region.y .+ 0.5 .* bleach_region.ly))
-    
-    return idx_bleach
-
-end
-
-
-function get_bleach_region_index(bleach_region::CircleROI{T, S}, X::AbstractArray{T, 2}, Y::AbstractArray{T, 2}) where {T<:Real, S<:Integer}
-
-    # Make a circular cutout of a matrix
-    idx_bleach = (( X .- bleach_region.x ).^2 + ( Y .- bleach_region.y ).^2 .<= bleach_region.r^2)
-
-    return idx_bleach
-
-end
-
-function create_fourier_grid(n_pixels::T) where {T<:Integer}
+function create_fourier_grid(n_pixels::T) where {T <: Integer}
 
     # Julia has no ndgrid or meshgrid function, out of principle
     # it would seem. Not "Julian" enough.
