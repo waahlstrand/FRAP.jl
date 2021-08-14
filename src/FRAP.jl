@@ -1,5 +1,6 @@
 module FRAP
     
+    include("device.jl")
     include("concentration.jl")
     include("mask.jl")
     include("params.jl")
@@ -7,6 +8,7 @@ module FRAP
     include("fit.jl")
     include("recovery.jl")
 
+    export cpu, gpu
     export run
     export concentration
     export ExperimentParams, BathParams

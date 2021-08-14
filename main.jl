@@ -1,13 +1,13 @@
 # Packages 
-using Flux
-using Revise
+# using Revise
 using Random
-using BenchmarkTools
+using FRAP
+# using BenchmarkTools
 using Plots
-theme(:solarized_light)
+# theme(:solarized_light)
 
-includet(joinpath("src", "FRAP.jl"))
-import .FRAP
+# includet(joinpath("src", "FRAP.jl"))
+# import .FRAP
 
 
 function main()
@@ -66,19 +66,19 @@ function main()
 
     # Calculate the residuals
     rc = rc |> cpu
-    c  = c |> gpu
-    residual  = FRAP.residual(c, experiment, bath, rng)
+    c  = c |> cpu
+    # residual  = FRAP.residual(rc, experiment, bath, rng)
     # plot(1:n_frames, rc)
-    histogram(residual)
+    # histogram(residual)
     
 
     # @benchmark FRAP.run($experiment, $bath, $rng)
     #############################################
     # Plot the experiment
     # c = c |> cpu
-    # @gif for i in 1:size(c, 3)
-    #     heatmap(c[:,:,i], clim=(0,1), aspect_ratio=:equal)
-    # end
+    @gif for i in 1:size(c, 3)
+        heatmap(c[:,:,i], clim=(0,1), aspect_ratio=:equal)
+    end
 
 end
 

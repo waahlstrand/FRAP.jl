@@ -1,4 +1,3 @@
-using Flux
 using Statistics
 
 function recovery_curve(c::AbstractArray{T, 3}, bath::BathParams{T}) where {T<:Real}
@@ -13,5 +12,19 @@ function recovery_curve(c::AbstractArray{T, 3}, bath::BathParams{T}) where {T<:R
 
     return rc
 
+end
+
+function recovery_curve(c::AbstractArray{T, 4}, bath::BathParams{T}) where {T<:Real}
+    #TODO: Test batched version
+
+    # Create a binary ROI shaped matrix
+    ROI = FRAP.create_mask(bath.n_pixels, bath.n_pad_pixels, bath.ROI; type=T) |> gpu
+    n_pixels_in_ROI = sum(ROI)
+    
+    # Summation over each frame matrix in time after multiplying with a ROI shaped matrix
+    rc = map(x -> dot(x, ROI), eachslice(c; dims=(1,3)))/n_pixels_in_ROI |> gpu
+     
+
+    return rc
 
 end

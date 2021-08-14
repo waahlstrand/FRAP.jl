@@ -4,9 +4,10 @@ authors = ["Victor Wåhlstrand Skärström <victor.wahlstrand@email.com>", "Magn
 version = "0.1.0"
 
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
