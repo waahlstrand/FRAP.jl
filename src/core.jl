@@ -1,4 +1,90 @@
 using CUDA, CUDA.CUFFT, LinearAlgebra
+using Random
+
+function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234))
+
+    bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
+    dims = (bath.n_elements, bath.n_elements, bath.n_frames)
+
+    # Calculate the dimensions needed for
+    # the real FFT
+    ds = (div(size(bath.ξ², 1),2)+1,size(bath.ξ², 2))
+
+    # Create masks
+    imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, 
+                                                      bath.n_pixels, 
+                                                      bath.n_pad_pixels) |> gpu
+
+    bleach_mask     = FRAP.create_bleach_mask(experiment.α, 
+                                              experiment.γ, 
+                                              bath.n_pixels, 
+                                              bath.n_pad_pixels, 
+                                              bath.ROI) |> gpu
+
+
+    # Define when to bleach with what
+    stages = bleaching_stages(bleach_mask, imaging_mask, bath)
+
+    # Pre-plan the Fast Fourier Transforms
+    P, P̂ = ffts(bath.ξ², ds)
+    A    = kernel(bath.ξ², experiment.D, experiment.δt, ds)
+
+    # Pre-allocate the FFT output
+    ĉ  = zeros(Complex{T}, ds) |> gpu
+
+    # Initialize a concentration
+    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> gpu
+
+    # Simulate time evolution
+    for stage in stages
+
+        evolve!(cs..., A, stage..., ĉ, P, P̂)
+
+    end
+
+    # Sum mobile and immobile parts
+    c = sum(cs)
+
+    # Remove bleach period
+    c = c[:, :,  setdiff(1:end, bleach)]
+
+    # Add noise
+    c .= add_noise(c, experiment.a, experiment.b, rng)
+
+
+    return c
+
+end
+
+function bleaching_stages(bleach_mask, imaging_mask, bath::BathParams{T}) where {T<: Real}
+    
+    slices = (1:bath.n_prebleach_frames,
+              bath.n_prebleach_frames:bath.n_prebleach_frames+bath.n_bleach_frames,
+              bath.n_prebleach_frames+bath.n_bleach_frames:bath.n_frames-1)
+
+
+    stages = (
+                ([imaging_mask], slices[1]), 
+                ([imaging_mask, bleach_mask], slices[2]), 
+                ([imaging_mask], slices[3])
+              )
+  
+    return stages
+
+end
+
+
+function ffts(ξ², ds)
+
+    plan     = zeros(size(ξ²)) |> gpu
+    inv_plan = zeros(Complex{T},ds) |> gpu
+
+    P = plan_rfft(plan) 
+    P̂ = plan_irfft(inv_plan, size(plan, 1)) 
+
+    return P, P̂
+
+end
 
 function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T<:Real}
 
@@ -128,8 +214,16 @@ function diffuse!(A::AbstractArray{T, 2}, c, ĉ, P, P̂) where {T<:Real}
 
 end
 
-function step(ξ²::AbstractArray{T, 2}, D::T, δt::T,) where {T<:Real}
+function kernel(ξ²::AbstractArray{T, 2}, D::T, δt::T, ds) where {T<:Real}
+    
+    ξ² = ξ²[1:ds[1], 1:ds[2]] 
+    
+    return step(D, ξ², δt)
+    
+end
 
+function step(ξ²::AbstractArray{T, 2}, D::T, δt::T) where {T<:Real}
+    
     return exp.(-D * ξ² * δt)
     
 end
