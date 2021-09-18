@@ -1,20 +1,35 @@
 using Statistics
+using CUDA
 
-# function recovery_curve(c::AbstractArray{T, 3}, bath::BathParams{T}) where {T<:Real}
+function recovery_curve(c::CuArray{T, 3}, bath::BathParams{T}) where {T<:Real}
 
 
-#     # Create a binary ROI shaped matrix
-#     ROI = FRAP.create_mask(bath.n_pixels, bath.n_pad_pixels, bath.ROI; type=T) |> gpu
-#     n_pixels_in_ROI = sum(ROI)
+    # Create a binary ROI shaped matrix
+    ROI = FRAP.create_mask(bath.n_pixels, 0, bath.ROI; type=T) |> gpu
+    n_pixels_in_ROI = sum(ROI)
     
-#     # Summation over each frame matrix in time after multiplying with a ROI shaped matrix
-#     rc = map(x -> dot(x, ROI), eachslice(c; dims=3))/n_pixels_in_ROI |> gpu
+    # Summation over each frame matrix in time after multiplying with a ROI shaped matrix
+    # rc = map(x -> dot(x, ROI), eachslice(c; dims=3))/n_pixels_in_ROI |> gpu
+    rc = reduce(+, c .* ROI; dims=(1,2))
+    rc = reshape(rc, size(c, 3))
      
 
-#     return rc
+    return rc / n_pixels_in_ROI
 
-# end
+end
 
+function recovery_curve(c::CuArray{T, 4}, bath::BathParams{T}) where {T<:Real}
+
+    rcs = CUDA.zeros(T, (size(c,3), size(c, 4)))
+
+    for b in 1:size(c, 4)
+        rcs[:, b] = recovery_curve(c[:, :, :, b], bath)
+    end
+    # rcs = reduce(x -> recovery_curve(x, bath), c; dims=(1,2,3), init=CUDA.zeros((size(c, (1, 2, 3)))))
+
+    return rcs
+
+end
 
 function recovery_curve(c::AbstractArray{T, 3}, bath::BathParams{T}) where {T<:Real}
 
