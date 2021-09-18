@@ -4,7 +4,7 @@ using Random
 using FRAP
 # using BenchmarkTools
 using Plots
-# theme(:solarized_light)
+theme(:solarized_light)
 
 # includet(joinpath("src", "FRAP.jl"))
 # import .FRAP
@@ -19,7 +19,7 @@ function main()
     # Will be defined in configuration files
 
     n_pixels     = 256
-    n_pad_pixels = 0#128
+    n_pad_pixels = 64#128]
     pixel_size::Float32   = 7.5e-7
 
     n_prebleach_frames    = 10
@@ -55,29 +55,17 @@ function main()
                                 n_prebleach_frames, n_bleach_frames, n_postbleach_frames, 
                                 )
 
-    # Test the bleach mask creation
-    # @benchmark FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI)
-
     # Run FRAP
-    c = FRAP.run(experiment, bath, rng)
-
+    c = FRAP.run(experiment, bath, rng) |> cpu
+    
     # Calculate recovery curve
     rc = FRAP.recovery_curve(c, bath)
 
-    # Calculate the residuals
-    rc = rc |> cpu
-    c  = c |> cpu
-    # residual  = FRAP.residual(rc, experiment, bath, rng)
-    # plot(1:n_frames, rc)
-    # histogram(residual)
-    
 
-    # @benchmark FRAP.run($experiment, $bath, $rng)
-    #############################################
-    # Plot the experiment
-    # c = c |> cpu
     @gif for i in 1:size(c, 3)
-        heatmap(c[:,:,i], clim=(0,1), aspect_ratio=:equal)
+        h = heatmap(c[:,:,i], clim=(0,1), xlim=(0,n_pixels), ylim=(0,n_pixels), colorbar=nothing)
+        p = plot(1:i, rc[1:i], ylim=(0.5,1), xlim=(0,size(c,3)-1), legend=false)
+        plot(h, p, layout=grid(1, 2, widths=[0.5, 0.5], heights=[0.75, 0.75]) )
     end
 
 end

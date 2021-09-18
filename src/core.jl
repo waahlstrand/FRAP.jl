@@ -1,7 +1,7 @@
 using CUDA, CUDA.CUFFT, LinearAlgebra
 using Random
 
-function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234))
+function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234)) where {T<: Real}
 
     bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
     dims = (bath.n_elements, bath.n_elements, bath.n_frames)
@@ -19,7 +19,7 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
                                               experiment.γ, 
                                               bath.n_pixels, 
                                               bath.n_pad_pixels, 
-                                              bath.ROI) |> gpu
+                                              bath.ROI_pad) |> gpu
 
 
     # Define when to bleach with what
@@ -110,7 +110,7 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
 
     # Create masks
     imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> gpu
-    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI) |> gpu
+    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> gpu
 
     slices = (1:n_prebleach_frames,
               n_prebleach_frames:n_prebleach_frames+n_bleach_frames,
@@ -156,7 +156,11 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
 
     # Remove bleach
     bleach = (n_prebleach_frames+1):(n_prebleach_frames+n_bleach_frames)
-    c = c[:, :,  setdiff(1:end, bleach)]
+
+    # Remove padding
+    nonpadded = (bath.n_pad_pixels+1):(bath.n_pixels+bath.n_pad_pixels)
+
+    c = c[nonpadded, nonpadded,  setdiff(1:end, bleach)]
 
     # Add noise
     c .= add_noise(c, a, b, rng)

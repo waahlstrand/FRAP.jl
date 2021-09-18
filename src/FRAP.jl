@@ -1,6 +1,7 @@
 module FRAP
     
-    include("device.jl")
+    using Base: func_for_method_checked
+include("device.jl")
     include("concentration.jl")
     include("mask.jl")
     include("params.jl")

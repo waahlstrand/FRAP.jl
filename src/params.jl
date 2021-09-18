@@ -44,6 +44,7 @@ struct BathParams{T<:Real, S<:Integer, R<:FRAP.AbstractROI{<:Real}}
     n_frames::S             
     n_elements::S
     ROI::R
+    ROI_pad::R
     ξ²::Array{T, 2}
 
     
@@ -62,7 +63,7 @@ function BathParams(x::T, y::T, r::T;
 
 
     r /= pixel_size
-
+    ROI_pad = FRAP.create_bleach_region(x+n_pad_pixels, y+n_pad_pixels, r)
     ROI = FRAP.create_bleach_region(x, y, r)
     ξ² = convert(Array{T, 2}, FRAP.create_fourier_grid(n_elements))
 
@@ -75,6 +76,7 @@ function BathParams(x::T, y::T, r::T;
             n_frames,
             n_elements, 
             ROI, 
+            ROI_pad,
             ξ²) 
 
 end
@@ -96,6 +98,7 @@ function BathParams(x::T, y::T, lx::T, ly::T;
     # ROI = FRAP.create_bleach_region(x+n_pad_pixels, y+n_pad_pixels, lx, ly)
     # ξ² = FRAP.create_fourier_grid(n_elements)
 
+    ROI_pad = FRAP.create_bleach_region(x+n_pad_pixels, y+n_pad_pixels, lx, ly)
     ROI = FRAP.create_bleach_region(x, y, lx, ly)
     ξ² = convert(Array{T, 2}, FRAP.create_fourier_grid(n_elements))
 
@@ -108,6 +111,7 @@ function BathParams(x::T, y::T, lx::T, ly::T;
             n_frames,
             n_elements,
             ROI, 
+            ROI_pad,
             ξ²)
 
 end

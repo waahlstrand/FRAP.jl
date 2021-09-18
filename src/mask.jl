@@ -19,8 +19,26 @@ struct RectangleROI{T} <: AbstractROI{T}
 
 end
 
-# Not implemented
-# struct ArbitraryROI <: AbstractROI end
+function inside(x, y, ROI::CircleROI)
+    r_unit_pixel = 1 / sqrt(2)
+
+    return ( x - ROI.x_center )^2 + ( y - ROI.y_center )^2 <= (ROI.r - r_unit_pixel)^2
+end
+
+function inside(x, y, ROI::RectangleROI)
+    return (x >=  ROI.x_center - 0.5 * ROI.lx + 1) & (x <=  ROI.x_center + 0.5 * ROI.lx - 1) & (y >=  ROI.y_center - 0.5 * ROI.ly + 1) & (y <=  ROI.y_center + 0.5 * ROI.ly - 1)
+end
+
+function outside(x, y, ROI::CircleROI)
+    r_unit_pixel = 1 / sqrt(2)
+
+    return ( x - ROI.x_center )^2 + ( y - ROI.y_center )^2 >= (ROI.r + r_unit_pixel)^2
+end
+
+function outside(x, y, ROI::RectangleROI)
+    return (x >=  ROI.x_center - 0.5 * ROI.lx - 1) & (x <=  ROI.x_center + 0.5 * ROI.lx + 1) & (y >=  ROI.y_center - 0.5 * ROI.ly - 1) & (y <=  ROI.y_center + 0.5 * ROI.ly + 1)
+end
+
 
 function create_bleach_region(x_center::T, y_center::T, r::T) where {T <: Real}
 
@@ -50,22 +68,12 @@ function create_mask(n_pixels::S,
 
     mask = zeros(type, (n_elements, n_elements))
                  
-    x_center = ROI.x_center
-    y_center = ROI.y_center
-    r        = ROI.r
-                 
     pixels = 0.5:1:(n_elements - 0.5)
-                 
-                 
-    r_unit_pixel = 1 / sqrt(2)
-                 
+                                  
     for (j, y) in enumerate(pixels)
         for (i, x) in enumerate(pixels)
-                 
-            inside_circle   = ( x - x_center )^2 + ( y - y_center )^2 <= (r - r_unit_pixel)^2
-            # outside_circle  = ( x - x_center )^2 + ( y - y_center )^2 >= (r + r_unit_pixel)^2
-                 
-            if inside_circle        # clearly inside circle
+                
+            if inside(x, y, ROI)
                  
                 mask[i, j] = 1
                  
@@ -86,23 +94,14 @@ function create_mask(n_pixels::S,
     n_elements = n_pixels + 2 * n_pad_pixels
 
     mask = zeros(type, (n_elements, n_elements))
-                 
-    x_center = ROI.x_center
-    y_center = ROI.y_center
-    lx        = ROI.lx
-    ly        = ROI.ly
 
     pixels = 0.5:1:(n_elements - 0.5)
 
-    r_unit_pixel = 1 / sqrt(2)
 
     for (j, y) in enumerate(pixels)
         for (i, x) in enumerate(pixels)
 
-            inside_rectangle   = (x >=  x_center - 0.5 * lx + 1) & (x <=  x_center + 0.5 * lx - 1) & (y >=  y_center - 0.5 * ly + 1) & (y <=  y_center + 0.5 * ly - 1)
-            # outside_rectangle  = (x >=  x_center - 0.5 * lx - 1) & (x <=  x_center + 0.5 * lx + 1) & (y >=  y_center - 0.5 * ly - 1) & (y <=  y_center + 0.5 * ly + 1)
-
-            if inside_rectangle        # clearly inside
+            if inside(x, y, ROI)        # clearly inside
                  
                 mask[i, j] = 1
                  
@@ -140,19 +139,14 @@ function create_bleach_mask(α::T,
                         step=1 / subsampling_factor, 
                         length=(subsampling_factor))
 
-    r_unit_pixel = 1 / sqrt(2)
-
     for (j, y) in enumerate(pixels)
         for (i, x) in enumerate(pixels)
 
-            inside_circle   = ( x - x_center )^2 + ( y - y_center )^2 <= (r - r_unit_pixel)^2
-            outside_circle  = ( x - x_center )^2 + ( y - y_center )^2 >= (r + r_unit_pixel)^2
-
-            if inside_circle        # clearly inside circle
+            if inside(x, y, ROI)        # clearly inside circle
 
                 mask[i, j] = α
 
-            elseif !outside_circle  # Near or on the edge of the bleach region.          
+            elseif !outside(x, y, ROI)  # Near or on the edge of the bleach region.          
  
                 fraction_of_pixel_inside = 0.0
 
@@ -201,19 +195,14 @@ function create_bleach_mask(α::T,
                         step=1 / subsampling_factor, 
                         length=(subsampling_factor))
 
-    r_unit_pixel = 1 / sqrt(2)
-
     for (j, y) in enumerate(pixels)
         for (i, x) in enumerate(pixels)
 
-            inside_rectangle   = (x >=  x_center - 0.5 * lx + 1) & (x <=  x_center + 0.5 * lx - 1) & (y >=  y_center - 0.5 * ly + 1) & (y <=  y_center + 0.5 * ly - 1)
-            outside_rectangle  = (x >=  x_center - 0.5 * lx - 1) & (x <=  x_center + 0.5 * lx + 1) & (y >=  y_center - 0.5 * ly - 1) & (y <=  y_center + 0.5 * ly + 1)
-
-            if inside_rectangle        # clearly inside
+            if inside(x, y, ROI)        # clearly inside
 
                 mask[i, j] = α
 
-            elseif !outside_rectangle  # Near or on the edge of the bleach region.          
+            elseif !outside(x, y, ROI)  # Near or on the edge of the bleach region.          
  
                 fraction_of_pixel_inside = 0.0
 
@@ -250,30 +239,6 @@ function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {
     return mask
 
 end
-
-function create_bleach_mask_legacy(α::T, γ::T, n_pixels::S, n_pad_pixels::S, bleach_region::AbstractROI{T}) where {T <: Real,S <: Integer}
-
-    upsampling_factor = 15; # Needs to be a multiple of 3 due the 'box' method in imresize.
-
-    # Create an upsampled bleach region to later downsample
-    bounds              = get_bounds(bleach_region, γ)
-    bleach_region_mask  = get_bleach_region_mask(bounds, bleach_region, α, upsampling_factor)
-
-    # Smooth mask
-    if γ > 0.0
-        bleach_region_mask = filter_mask!(bleach_region_mask, γ, upsampling_factor)
-    end
-
-    # Downsample mask by the upsampling factor
-    bleach_region_mask = downsample_mask!(bleach_region_mask, upsampling_factor) 
-
-    mask    = ones((n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
-    mask[n_pad_pixels + bounds.lb_x:n_pad_pixels + bounds.ub_x, n_pad_pixels + bounds.lb_y:n_pad_pixels + bounds.ub_y] .= bleach_region_mask
-
-    return mask
-
-end
-
 
 
 function create_fourier_grid(n_pixels::T) where {T <: Integer}
