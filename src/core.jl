@@ -1,5 +1,7 @@
-using CUDA, CUDA.CUFFT, LinearAlgebra
+using CUDA, CUDA.CUFFT
+using LinearAlgebra
 using Random
+@assert CUDA.functional(true)
 
 function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234)) where {T<: Real}
 
@@ -13,13 +15,13 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
     # Create masks
     imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, 
                                                       bath.n_pixels, 
-                                                      bath.n_pad_pixels) |> gpu
+                                                      bath.n_pad_pixels) |> cu
 
     bleach_mask     = FRAP.create_bleach_mask(experiment.α, 
                                               experiment.γ, 
                                               bath.n_pixels, 
                                               bath.n_pad_pixels, 
-                                              bath.ROI_pad) |> gpu
+                                              bath.ROI_pad) |> cu
 
 
     # Define when to bleach with what
@@ -30,10 +32,10 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
     A    = kernel(bath.ξ², experiment.D, experiment.δt, ds)
 
     # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> gpu
+    ĉ  = zeros(Complex{T}, ds) |> cu
 
     # Initialize a concentration
-    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> gpu
+    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> cu
 
     # Simulate time evolution
     for stage in stages
@@ -76,8 +78,8 @@ end
 
 function ffts(ξ², ds)
 
-    plan     = zeros(size(ξ²)) |> gpu
-    inv_plan = zeros(Complex{T},ds) |> gpu
+    plan     = zeros(size(ξ²)) |> cu
+    inv_plan = zeros(Complex{T},ds) |> cu
 
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
@@ -109,34 +111,34 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
     dims = (bath.n_elements, bath.n_elements, bath.n_frames)
 
     # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> gpu
-    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> gpu
+    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> cu
+    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> cu
 
     slices = (1:n_prebleach_frames,
               n_prebleach_frames:n_prebleach_frames+n_bleach_frames,
               n_prebleach_frames+n_bleach_frames:n_frames-1)
     
     # Initialize a concentration
-    cs = concentration(c₀, ϕₘ, dims) |> gpu
+    cs = concentration(c₀, ϕₘ, dims) |> cu
 
     # Calculate the dimensions needed for
     # the real FFT
     ds = (div(size(ξ², 1),2)+1,size(ξ², 2))
 
     # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> gpu
+    ĉ  = zeros(Complex{T}, ds) |> cu
 
     # Plan ffts for performance
     # Using real FFTs approximately halfs 
     # memory and time
-    plan     = zeros(size(ξ²)) |> gpu
-    inv_plan = zeros(Complex{T},ds) |> gpu
+    plan     = zeros(size(ξ²)) |> cu
+    inv_plan = zeros(Complex{T},ds) |> cu
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
 
     # Calculate the FFT kernel step
     ξ² = ξ²[1:ds[1], 1:ds[2]] 
-    A = step(ξ², D, δt) |> gpu
+    A = step(ξ², D, δt) |> cu
 
     # Sets the configuration of bleaching and number of frames for bleaching
     stages = (
@@ -171,7 +173,7 @@ end
 
 function add_noise(c, a, b, rng)
 
-    gaussian = randn(rng, size(c)) |> gpu
+    gaussian = randn(rng, size(c)) |> cu
 
     return c .+ sqrt.(a.+b.*c).*gaussian
 

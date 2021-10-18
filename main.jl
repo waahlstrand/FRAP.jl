@@ -1,14 +1,9 @@
-# Packages 
-# using Revise
+
 using Random
 using FRAP
-# using BenchmarkTools
+using CUDA
 using Plots
-theme(:solarized_light)
-
-# includet(joinpath("src", "FRAP.jl"))
-# import .FRAP
-
+# using Flux
 
 function main()
 
@@ -56,11 +51,24 @@ function main()
                                 )
 
     # Run FRAP
-    c = FRAP.run(experiment, bath, rng) |> cpu
+    c = FRAP.run(experiment, bath, rng) 
     
     # Calculate recovery curve
-    rc = FRAP.recovery_curve(c, bath)
+    rc = FRAP.recovery_curve(c, bath) 
 
+    # cs = CUDA.zeros((256, 256, 110, 2))
+    # cs[:, :, :, 1] = c
+    # cs[:, :, :, 2] = c
+
+    # rcs = FRAP.recovery_curve(cs, bath)
+
+    # println(size(rcs))
+    # println(typeof(rcs))
+
+
+
+    c = c |> Array
+    rc = rc |> Array
 
     @gif for i in 1:size(c, 3)
         h = heatmap(c[:,:,i], clim=(0,1), xlim=(0,n_pixels), ylim=(0,n_pixels), colorbar=nothing)

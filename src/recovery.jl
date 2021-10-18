@@ -5,11 +5,11 @@ function recovery_curve(c::CuArray{T, 3}, bath::BathParams{T}) where {T<:Real}
 
 
     # Create a binary ROI shaped matrix
-    ROI = FRAP.create_mask(bath.n_pixels, 0, bath.ROI; type=T) |> gpu
+    ROI = FRAP.create_mask(bath.n_pixels, 0, bath.ROI; type=T) |> cu
     n_pixels_in_ROI = sum(ROI)
     
     # Summation over each frame matrix in time after multiplying with a ROI shaped matrix
-    # rc = map(x -> dot(x, ROI), eachslice(c; dims=3))/n_pixels_in_ROI |> gpu
+    # rc = map(x -> dot(x, ROI), eachslice(c; dims=3))/n_pixels_in_ROI |> CuArray
     rc = reduce(+, c .* ROI; dims=(1,2))
     rc = reshape(rc, size(c, 3))
      

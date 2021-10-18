@@ -1,7 +1,6 @@
 module FRAP
     
-    using Base: func_for_method_checked
-include("device.jl")
+    # include("device.jl")
     include("concentration.jl")
     include("mask.jl")
     include("params.jl")
@@ -9,7 +8,7 @@ include("device.jl")
     include("fit.jl")
     include("recovery.jl")
 
-    export cpu, gpu
+    # export cpu, gpu
     export run
     export concentration
     export ExperimentParams, BathParams
