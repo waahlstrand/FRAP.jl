@@ -17,21 +17,21 @@ using YAML
 
 end
 
-function ExperimentParams(pixel_size::T; 
-                          c₀::Union{T, Array{T,1}}, 
-                          ϕₘ::T, 
-                          D::Union{T, Array{T,1}}, 
-                          δt::T, 
-                          α::Union{T, Array{T,1}}, 
-                          β::T, 
-                          γ::T, 
-                          a::Union{T, Array{T,1}}, 
-                          b::T) where T <: Real
+# function ExperimentParams(pixel_size::T; 
+#                           c₀::Union{T, Array{T,1}}, 
+#                           ϕₘ::T, 
+#                           D::Union{T, Array{T,1}}, 
+#                           δt::T, 
+#                           α::Union{T, Array{T,1}}, 
+#                           β::T, 
+#                           γ::T, 
+#                           a::Union{T, Array{T,1}}, 
+#                           b::T) where T <: Real
 
-    D = D ./ pixel_size^2
+#     D = D ./ pixel_size^2
 
-    return ExperimentParams{T}(c₀=c₀, ϕₘ=ϕₘ, D=D, δt=δt, α=α, β=β, γ=γ, a=a, b=b)
-end
+#     return ExperimentParams{T}(c₀=c₀, ϕₘ=ϕₘ, D=D, δt=δt, α=α, β=β, γ=γ, a=a, b=b)
+# end
 
 struct BathParams{T<:Real, S<:Integer, R<:FRAP.AbstractROI{<:Real}}
 
@@ -139,8 +139,7 @@ function from_config(file :: String; type = Float32)
     bath_args["pixel size"] = convert(type, bath_args["pixel size"])
 
 
-    experiment = FRAP.ExperimentParams(bath_args["pixel size"];
-                                       c₀ = exp_args["initial concentration"],
+    experiment = FRAP.ExperimentParams(c₀ = exp_args["initial concentration"],
                                        ϕₘ = exp_args["mobile fraction"],
                                        D = exp_args["diffusion coefficient"],
                                        δt = exp_args["timestep"],

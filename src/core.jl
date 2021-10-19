@@ -23,7 +23,6 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
                                               bath.n_pad_pixels, 
                                               bath.ROI_pad) |> cu
 
-
     # Define when to bleach with what
     stages = bleaching_stages(bleach_mask, imaging_mask, bath)
 
@@ -94,7 +93,7 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
     # Unload all parameters
     c₀ = experiment.c₀
     ϕₘ = experiment.ϕₘ
-    D  = experiment.D
+    D  = experiment.D / bath.pixel_size^2 # To /pixel²
     δt = experiment.δt
     α  = experiment.α
     β  = experiment.β
