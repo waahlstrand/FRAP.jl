@@ -45,7 +45,7 @@ function main()
     #############################################
     # Run the experiment
 
-    experiment  = FRAP.ExperimentParams(pixel_size; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b)
+    experiment  = FRAP.ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b)
     bath        = FRAP.BathParams(x, y, r; n_pixels, n_pad_pixels, pixel_size, 
                                 n_prebleach_frames, n_bleach_frames, n_postbleach_frames, 
                                 )

@@ -3,6 +3,8 @@ using LinearAlgebra
 using Random
 @assert CUDA.functional(true)
 
+device(x) = CUDA.functional(true) ? cu(x) : x
+
 function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234)) where {T<: Real}
 
     bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
@@ -15,13 +17,13 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
     # Create masks
     imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, 
                                                       bath.n_pixels, 
-                                                      bath.n_pad_pixels) |> cu
+                                                      bath.n_pad_pixels) |> device
 
     bleach_mask     = FRAP.create_bleach_mask(experiment.α, 
                                               experiment.γ, 
                                               bath.n_pixels, 
                                               bath.n_pad_pixels, 
-                                              bath.ROI_pad) |> cu
+                                              bath.ROI_pad) |> device
 
     # Define when to bleach with what
     stages = bleaching_stages(bleach_mask, imaging_mask, bath)
@@ -31,10 +33,10 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
     A    = kernel(bath.ξ², experiment.D, experiment.δt, ds)
 
     # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> cu
+    ĉ  = zeros(Complex{T}, ds) |> device
 
     # Initialize a concentration
-    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> cu
+    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> device
 
     # Simulate time evolution
     for stage in stages
@@ -77,8 +79,8 @@ end
 
 function ffts(ξ², ds)
 
-    plan     = zeros(size(ξ²)) |> cu
-    inv_plan = zeros(Complex{T},ds) |> cu
+    plan     = zeros(size(ξ²)) |> device
+    inv_plan = zeros(Complex{T},ds) |> device
 
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
@@ -110,34 +112,34 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
     dims = (bath.n_elements, bath.n_elements, bath.n_frames)
 
     # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> cu
-    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> cu
+    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> device
+    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> device
 
     slices = (1:n_prebleach_frames,
               n_prebleach_frames:n_prebleach_frames+n_bleach_frames,
               n_prebleach_frames+n_bleach_frames:n_frames-1)
     
     # Initialize a concentration
-    cs = concentration(c₀, ϕₘ, dims) |> cu
+    cs = concentration(c₀, ϕₘ, dims) |> device
 
     # Calculate the dimensions needed for
     # the real FFT
     ds = (div(size(ξ², 1),2)+1,size(ξ², 2))
 
     # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> cu
+    ĉ  = zeros(Complex{T}, ds) |> device
 
     # Plan ffts for performance
     # Using real FFTs approximately halfs 
     # memory and time
-    plan     = zeros(size(ξ²)) |> cu
-    inv_plan = zeros(Complex{T},ds) |> cu
+    plan     = zeros(size(ξ²)) |> device
+    inv_plan = zeros(Complex{T},ds) |> device
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
 
     # Calculate the FFT kernel step
     ξ² = ξ²[1:ds[1], 1:ds[2]] 
-    A = step(ξ², D, δt) |> cu
+    A = step(ξ², D, δt) |> device
 
     # Sets the configuration of bleaching and number of frames for bleaching
     stages = (
@@ -172,7 +174,7 @@ end
 
 function add_noise(c, a, b, rng)
 
-    gaussian = randn(rng, size(c)) |> cu
+    gaussian = randn(rng, size(c)) |> device
 
     return c .+ sqrt.(a.+b.*c).*gaussian
 
