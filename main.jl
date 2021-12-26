@@ -7,7 +7,7 @@ using Plots
 
 function main()
 
-    rng = MersenneTwister(1234);
+    Random.seed!(1234)
 
     #############################################
     # Parameters
@@ -51,7 +51,7 @@ function main()
                                 )
 
     # Run FRAP
-    c = FRAP.run(experiment, bath, rng) 
+    c = FRAP.run(experiment, bath) 
     
     # Calculate recovery curve
     rc = FRAP.recovery_curve(c, bath) 

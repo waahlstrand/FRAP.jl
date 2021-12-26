@@ -1,11 +1,10 @@
 using CUDA, CUDA.CUFFT
 using LinearAlgebra
 using Random
-@assert CUDA.functional(true)
 
 device(x) = CUDA.functional(true) ? cu(x) : x
 
-function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=MersenneTwister(1234)) where {T<: Real}
+function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<: Real}
 
     bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
     dims = (bath.n_elements, bath.n_elements, bath.n_frames)
@@ -52,7 +51,7 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}; rng=Mers
     c = c[:, :,  setdiff(1:end, bleach)]
 
     # Add noise
-    c .= add_noise(c, experiment.a, experiment.b, rng)
+    c .= add_noise(c, experiment.a, experiment.b)
 
 
     return c
@@ -89,7 +88,7 @@ function ffts(ξ², ds)
 
 end
 
-function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T<:Real}
+function run(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
 
 
     # Unload all parameters
@@ -166,15 +165,15 @@ function run(experiment::ExperimentParams{T}, bath::BathParams{T}, rng) where {T
     c = c[nonpadded, nonpadded,  setdiff(1:end, bleach)]
 
     # Add noise
-    c .= add_noise(c, a, b, rng)
+    c .= add_noise(c, a, b)
 
     return c
     
 end
 
-function add_noise(c, a, b, rng)
+function add_noise(c, a, b)
 
-    gaussian = randn(rng, size(c)) |> device
+    gaussian = randn(size(c)) |> device
 
     return c .+ sqrt.(a.+b.*c).*gaussian
 
