@@ -9,6 +9,7 @@ module FRAP
     include("recovery.jl")
 
     # export cpu, gpu
+    export Signal
     export run
     export concentration
     export ExperimentParams, BathParams
