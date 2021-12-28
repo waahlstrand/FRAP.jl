@@ -233,7 +233,7 @@ end
 
 function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {T <: Real,S <: Integer}
 
-    mask    = ones((n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
+    mask    = ones(T, (n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
     mask[n_pad_pixels + 1:end - n_pad_pixels, n_pad_pixels + 1:end - n_pad_pixels] .= β
 
     return mask

@@ -1,41 +1,48 @@
-using CUDA, CUDA.CUFFT
 using LinearAlgebra
+# using CUDA, CUDA.CUFFT
+using FFTW
 using Random
 
-device(x) = CUDA.functional(true) ? cu(x) : x
+# device(x) = (parse(Int,ENV["CUDA_VISIBLE_DEVICES"]) > 0 && CUDA.functional(true)) ? cu(x) : x
 
-function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<: Real}
+@with_kw struct Signal{T<:Real}
+    experiment::ExperimentParams{T}
+    bath::BathParams{T}
+end
 
-    bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
-    dims = (bath.n_elements, bath.n_elements, bath.n_frames)
+function (s::Signal)()
+
+    return run(s.experiment, s.bath)
+
+end
+
+
+function run(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
+
+
+    # Rescale the diffusion coefficient from SI to per pixel²
+    Dₚ  = experiment.D / bath.pixel_size^2 
+
+    # Create masks
+    imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, bath.n_pixels, bath.n_pad_pixels) # |> device
+    bleach_mask     = FRAP.create_bleach_mask(experiment.α, experiment.γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) # |> device
 
     # Calculate the dimensions needed for
     # the real FFT
     ds = (div(size(bath.ξ², 1),2)+1,size(bath.ξ², 2))
 
-    # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, 
-                                                      bath.n_pixels, 
-                                                      bath.n_pad_pixels) |> device
+    # Initialize a concentration
+    cs = concentration(experiment.c₀, experiment.ϕₘ, (bath.n_elements, bath.n_elements, bath.n_frames)) # |> device
 
-    bleach_mask     = FRAP.create_bleach_mask(experiment.α, 
-                                              experiment.γ, 
-                                              bath.n_pixels, 
-                                              bath.n_pad_pixels, 
-                                              bath.ROI_pad) |> device
-
-    # Define when to bleach with what
-    stages = bleaching_stages(bleach_mask, imaging_mask, bath)
+    # Pre-allocate the FFT output
+    ĉ  = zeros(Complex{T}, ds) # |> device
 
     # Pre-plan the Fast Fourier Transforms
     P, P̂ = ffts(bath.ξ², ds)
-    A    = kernel(bath.ξ², experiment.D, experiment.δt, ds)
+    A    = kernel(bath.ξ², Dₚ, experiment.δt, ds)
 
-    # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> device
-
-    # Initialize a concentration
-    cs = concentration(experiment.c₀, experiment.ϕₘ, dims) |> device
+    # Define when to bleach with what
+    stages = bleaching_stages(bleach_mask, imaging_mask, bath)
 
     # Simulate time evolution
     for stage in stages
@@ -44,17 +51,32 @@ function simulate(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T
 
     end
 
-    # Sum mobile and immobile parts
-    c = sum(cs)
-
-    # Remove bleach period
-    c = c[:, :,  setdiff(1:end, bleach)]
+    # Get only concentration when not bleaching
+    # and without padding
+    c = get_true_concentration(cs, bath)
 
     # Add noise
     c .= add_noise(c, experiment.a, experiment.b)
 
+    return c
+    
+end
+
+function get_true_concentration(cs, bath::BathParams{T}) where {T <: Real}
+    
+    # Sum mobile and immobile parts
+    c = sum(cs)
+
+    # Remove bleach
+    bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
+
+    # Remove padding
+    nonpadding = (bath.n_pad_pixels+1):(bath.n_pixels+bath.n_pad_pixels)
+
+    c = c[nonpadding, nonpadding,  setdiff(1:end, bleach)]
 
     return c
+
 
 end
 
@@ -76,10 +98,10 @@ function bleaching_stages(bleach_mask, imaging_mask, bath::BathParams{T}) where 
 end
 
 
-function ffts(ξ², ds)
+function ffts(ξ²::Array{T, 2}, ds) where {T <: Real}
 
-    plan     = zeros(size(ξ²)) |> device
-    inv_plan = zeros(Complex{T},ds) |> device
+    plan     = zeros(T, size(ξ²)) # |> device
+    inv_plan = zeros(Complex{T},ds) # |> device
 
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
@@ -88,92 +110,9 @@ function ffts(ξ², ds)
 
 end
 
-function run(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
-
-
-    # Unload all parameters
-    c₀ = experiment.c₀
-    ϕₘ = experiment.ϕₘ
-    D  = experiment.D / bath.pixel_size^2 # To /pixel²
-    δt = experiment.δt
-    α  = experiment.α
-    β  = experiment.β
-    γ  = experiment.γ
-    a  = experiment.a
-    b  = experiment.b
-
-    n_prebleach_frames = bath.n_prebleach_frames
-    n_bleach_frames = bath.n_bleach_frames
-    n_postbleach_frames = bath.n_postbleach_frames
-    n_frames = bath.n_frames
-    ξ² = bath.ξ²
-
-    dims = (bath.n_elements, bath.n_elements, bath.n_frames)
-
-    # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(β, bath.n_pixels, bath.n_pad_pixels) |> device
-    bleach_mask     = FRAP.create_bleach_mask(α, γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> device
-
-    slices = (1:n_prebleach_frames,
-              n_prebleach_frames:n_prebleach_frames+n_bleach_frames,
-              n_prebleach_frames+n_bleach_frames:n_frames-1)
-    
-    # Initialize a concentration
-    cs = concentration(c₀, ϕₘ, dims) |> device
-
-    # Calculate the dimensions needed for
-    # the real FFT
-    ds = (div(size(ξ², 1),2)+1,size(ξ², 2))
-
-    # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) |> device
-
-    # Plan ffts for performance
-    # Using real FFTs approximately halfs 
-    # memory and time
-    plan     = zeros(size(ξ²)) |> device
-    inv_plan = zeros(Complex{T},ds) |> device
-    P = plan_rfft(plan) 
-    P̂ = plan_irfft(inv_plan, size(plan, 1)) 
-
-    # Calculate the FFT kernel step
-    ξ² = ξ²[1:ds[1], 1:ds[2]] 
-    A = step(ξ², D, δt) |> device
-
-    # Sets the configuration of bleaching and number of frames for bleaching
-    stages = (
-              ([imaging_mask], slices[1]), 
-              ([imaging_mask, bleach_mask], slices[2]), 
-              ([imaging_mask], slices[3])
-            )
-
-    for stage in stages
-
-        evolve!(cs..., A, stage..., ĉ, P, P̂)
-
-    end
-
-    # Sum mobile and immobile parts
-    c = sum(cs)
-
-    # Remove bleach
-    bleach = (n_prebleach_frames+1):(n_prebleach_frames+n_bleach_frames)
-
-    # Remove padding
-    nonpadded = (bath.n_pad_pixels+1):(bath.n_pixels+bath.n_pad_pixels)
-
-    c = c[nonpadded, nonpadded,  setdiff(1:end, bleach)]
-
-    # Add noise
-    c .= add_noise(c, a, b)
-
-    return c
-    
-end
-
 function add_noise(c, a, b)
 
-    gaussian = randn(size(c)) |> device
+    gaussian = randn(size(c)) # |> device
 
     return c .+ sqrt.(a.+b.*c).*gaussian
 
@@ -182,7 +121,8 @@ end
 function evolve!(mobile::AbstractArray{T, 3}, 
     immobile::AbstractArray{T, 3},
     A::AbstractArray{T, 2},
-    masks::Array{<:AbstractArray{T, 2}, 1}, frames::UnitRange{S}, ĉ, P, P̂) where {T<:Real, S<:Integer}
+    masks, 
+    frames::UnitRange{S}, ĉ, P, P̂) where {T<:Real, S<:Integer}
 
 
     # Initial concentration before diffusion
@@ -224,7 +164,7 @@ function kernel(ξ²::AbstractArray{T, 2}, D::T, δt::T, ds) where {T<:Real}
     
     ξ² = ξ²[1:ds[1], 1:ds[2]] 
     
-    return step(D, ξ², δt)
+    return step(ξ², D, δt)
     
 end
 
