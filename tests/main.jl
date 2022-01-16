@@ -1,7 +1,6 @@
 
 using Random
 using FRAP
-using ArgParse
 using Plots
 
 function main()
