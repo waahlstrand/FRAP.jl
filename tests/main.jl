@@ -2,6 +2,7 @@
 using Random
 using FRAP
 using Plots
+using Dates
 
 function main()
 
@@ -41,12 +42,12 @@ function main()
     #############################################
     # Run the experiment
 
-    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b, device="gpu")
+    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b, device="cpu")
     bath        = BathParams(x, y, r; n_pixels, n_pad_pixels, pixel_size, 
                                       n_prebleach_frames, n_bleach_frames, n_postbleach_frames)
 
     @info "Generating signal..."
-    c = signal(experiment, bath) |> Array
+    c = signal(experiment, bath) 
     @info "Signal generated!"
 
     @info "Calculating recovery curve..."
@@ -55,7 +56,7 @@ function main()
 
     @info "Creating animation..."
     animation = @animate for i in 1:size(c, 3)
-        h = heatmap(c[:,:,i], clim=(0,1), xlim=(0,n_pixels), ylim=(0,n_pixels), colorbar=nothing)
+        h = heatmap(c[:,:,i], clim=(0,1); xlim=(0,n_pixels), ylim=(0,n_pixels), colorbar=nothing)
         p = plot(1:i, rc[1:i], ylim=(0.5,1), xlim=(0,size(c,3)-1), legend=false)
         plot(h, p, layout=grid(1, 2, widths=[0.5, 0.5], heights=[0.75, 0.75]) )
     end
