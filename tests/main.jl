@@ -1,14 +1,10 @@
 
 using Random
 using FRAP
-using Dates
-# using CUDA
+using ArgParse
 using Plots
-# using Flux
 
 function main()
-
-    ENV["CUDA_VISIBLE_DEVICES"] = 0
 
     Random.seed!(1234)
 
@@ -23,8 +19,6 @@ function main()
     n_prebleach_frames    = 10
     n_bleach_frames       = 1
     n_postbleach_frames   = 100
-    n_frames              = n_prebleach_frames + n_postbleach_frames
-    n_elements            = n_pixels + 2*n_pad_pixels
 
     lx::Float32 = 30e-6 
     ly::Float32 = 30e-6
@@ -44,35 +38,21 @@ function main()
     γ::Float32 = 0.0
     a::Float32 = 0.02
     b::Float32 = 0.0
+
     #############################################
     # Run the experiment
 
-    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b)
+    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b, device="gpu")
     bath        = BathParams(x, y, r; n_pixels, n_pad_pixels, pixel_size, 
-                                n_prebleach_frames, n_bleach_frames, n_postbleach_frames, 
-                                )
+                                      n_prebleach_frames, n_bleach_frames, n_postbleach_frames)
 
-    # Run FRAP
-    # c = FRAP.run(experiment, bath) 
     @info "Generating signal..."
-    signal = Signal(experiment, bath)
-    c = signal()
+    c = signal(experiment, bath)
     @info "Signal generated!"
 
     @info "Calculating recovery curve..."
     rc = recovery_curve(c, bath) 
     @info "Recovery curve done!"
-
-    # cs = CUDA.zeros((256, 256, 110, 2))
-    # cs[:, :, :, 1] = c
-    # cs[:, :, :, 2] = c
-
-    # rcs = FRAP.recovery_curve(cs, bath)
-
-    # println(size(rcs))
-    # println(typeof(rcs))
-
-
 
     c = c |> Array
     rc = rc |> Array

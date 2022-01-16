@@ -40,13 +40,13 @@ function outside(x, y, ROI::RectangleROI)
 end
 
 
-function create_bleach_region(x_center::T, y_center::T, r::T) where {T <: Real}
+function region_of_interest(x_center::T, y_center::T, r::T) where {T <: Real}
 
     return CircleROI(x_center, y_center, r)
 
 end
 
-function create_bleach_region(x_center::T, y_center::T, lx::T, ly::T) where {T <: Real}
+function region_of_interest(x_center::T, y_center::T, lx::T, ly::T) where {T <: Real}
 
     return RectangleROI(x_center, y_center, lx, ly)
     
@@ -61,7 +61,7 @@ function bleach!(c::AbstractArray{T,2}, masks::Array{<:AbstractArray{T,2}}) wher
 end
 
 
-function create_mask(n_pixels::S, 
+function ROI_mask(n_pixels::S, 
                      n_pad_pixels::S,
                      ROI::CircleROI; type=Float32) where {S <: Integer}
     n_elements = n_pixels + 2 * n_pad_pixels
@@ -87,7 +87,7 @@ function create_mask(n_pixels::S,
 end
 
 
-function create_mask(n_pixels::S, 
+function ROI_mask(n_pixels::S, 
                      n_pad_pixels::S,
                      ROI::RectangleROI; type=Float32) where {S <: Integer}
 
@@ -118,7 +118,7 @@ end
 
 
 
-function create_bleach_mask(α::T, 
+function bleaching_mask(α::T, 
                             γ::T, 
                             n_pixels::S, 
                             n_pad_pixels::S, 
@@ -173,7 +173,7 @@ function create_bleach_mask(α::T,
 
 end
 
-function create_bleach_mask(α::T, 
+function bleaching_mask(α::T, 
                             γ::T, 
                             n_pixels::S, 
                             n_pad_pixels::S, 
@@ -231,7 +231,7 @@ end
 
 
 
-function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {T <: Real,S <: Integer}
+function imaging_mask(β::T, n_pixels::S, n_pad_pixels::S) where {T <: Real,S <: Integer}
 
     mask    = ones(T, (n_pixels + 2 * n_pad_pixels, n_pixels + 2 * n_pad_pixels))
     mask[n_pad_pixels + 1:end - n_pad_pixels, n_pad_pixels + 1:end - n_pad_pixels] .= β
@@ -241,7 +241,7 @@ function create_imaging_bleach_mask(β::T, n_pixels::S, n_pad_pixels::S) where {
 end
 
 
-function create_fourier_grid(n_pixels::T) where {T <: Integer}
+function fourier_grid(n_pixels::T) where {T <: Integer}
 
     # Julia has no ndgrid or meshgrid function, out of principle
     # it would seem. Not "Julian" enough.

@@ -1,86 +1,92 @@
 using LinearAlgebra
-# using CUDA, CUDA.CUFFT
+using CUDA, CUDA.CUFFT
 using FFTW
 using Random
 
-# device(x) = (parse(Int,ENV["CUDA_VISIBLE_DEVICES"]) > 0 && CUDA.functional(true)) ? cu(x) : x
 
-@with_kw struct Signal{T<:Real}
-    experiment::ExperimentParams{T}
-    bath::BathParams{T}
-end
+function signal(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
 
-function (s::Signal)()
-
-    return run(s.experiment, s.bath)
-
-end
-
-
-function run(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
+    # Select device
+    if CUDA.functional() && experiment.device == "gpu"
+        cpu_or_gpu = function(x::AbstractArray) 
+            return CuArray(x)
+        end
+    elseif (experiment.device == "cpu")
+        cpu_or_gpu = function(x::AbstractArray) 
+            return x
+        end    else 
+        @warn "Invalid device; falling back on cpu."
+        cpu_or_gpu = function(x::AbstractArray) 
+            return x
+        end    
+    end
 
 
     # Rescale the diffusion coefficient from SI to per pixel²
     Dₚ  = experiment.D / bath.pixel_size^2 
 
     # Create masks
-    imaging_mask    = FRAP.create_imaging_bleach_mask(experiment.β, bath.n_pixels, bath.n_pad_pixels) # |> device
-    bleach_mask     = FRAP.create_bleach_mask(experiment.α, experiment.γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) # |> device
+    imaging    = imaging_mask(experiment.β, bath.n_pixels, bath.n_pad_pixels) |> cpu_or_gpu
+    bleaching  = bleaching_mask(experiment.α, experiment.γ, bath.n_pixels, bath.n_pad_pixels, bath.ROI_pad) |> cpu_or_gpu
 
     # Calculate the dimensions needed for
     # the real FFT
     ds = (div(size(bath.ξ², 1),2)+1,size(bath.ξ², 2))
 
     # Initialize a concentration
-    cs = concentration(experiment.c₀, experiment.ϕₘ, (bath.n_elements, bath.n_elements, bath.n_frames)) # |> device
+    mobile, immobile = concentration(experiment.c₀, experiment.ϕₘ, (bath.n_elements, bath.n_elements, bath.n_frames))
+
+    mobile    = mobile |> cpu_or_gpu
+    immobile  = immobile |> cpu_or_gpu
 
     # Pre-allocate the FFT output
-    ĉ  = zeros(Complex{T}, ds) # |> device
+    ĉ  = zeros(Complex{T}, ds) |> cpu_or_gpu
 
     # Pre-plan the Fast Fourier Transforms
-    P, P̂ = ffts(bath.ξ², ds)
-    A    = kernel(bath.ξ², Dₚ, experiment.δt, ds)
+    P, P̂ = ffts(bath.ξ², ds, cpu_or_gpu)
+    A    = kernel(bath.ξ², Dₚ, experiment.δt, ds) |> cpu_or_gpu
 
     # Define when to bleach with what
-    stages = bleaching_stages(bleach_mask, imaging_mask, bath)
+    stages = bleaching_stages(bleaching, imaging, bath)
 
     # Simulate time evolution
     for stage in stages
 
-        evolve!(cs..., A, stage..., ĉ, P, P̂)
+        evolve!(mobile, immobile, A, stage..., ĉ, P, P̂)
 
     end
 
     # Get only concentration when not bleaching
     # and without padding
-    c = get_true_concentration(cs, bath)
+    c = extract_concentration((mobile, immobile), bath)
 
     # Add noise
-    c .= add_noise(c, experiment.a, experiment.b)
+    n = noise(experiment.a, experiment.b, size(c)) |> cpu_or_gpu
+    c = sqrt.(c).*n
 
     return c
     
 end
 
-function get_true_concentration(cs, bath::BathParams{T}) where {T <: Real}
+function extract_concentration(cs, bath::BathParams{T}) where {T <: Real}
     
     # Sum mobile and immobile parts
     c = sum(cs)
 
     # Remove bleach
-    bleach = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
+    bleach_idx = (bath.n_prebleach_frames+1):(bath.n_prebleach_frames+bath.n_bleach_frames)
 
     # Remove padding
-    nonpadding = (bath.n_pad_pixels+1):(bath.n_pixels+bath.n_pad_pixels)
+    nonpadding_idx = (bath.n_pad_pixels+1):(bath.n_pixels+bath.n_pad_pixels)
 
-    c = c[nonpadding, nonpadding,  setdiff(1:end, bleach)]
+    c = c[nonpadding_idx, nonpadding_idx,  setdiff(1:end, bleach_idx)]
 
     return c
 
 
 end
 
-function bleaching_stages(bleach_mask, imaging_mask, bath::BathParams{T}) where {T<: Real}
+function bleaching_stages(bleaching, imaging, bath::BathParams{T}) where {T<: Real}
     
     slices = (1:bath.n_prebleach_frames,
               bath.n_prebleach_frames:bath.n_prebleach_frames+bath.n_bleach_frames,
@@ -88,9 +94,9 @@ function bleaching_stages(bleach_mask, imaging_mask, bath::BathParams{T}) where 
 
 
     stages = (
-                ([imaging_mask], slices[1]), 
-                ([imaging_mask, bleach_mask], slices[2]), 
-                ([imaging_mask], slices[3])
+                ([imaging], slices[1]), 
+                ([imaging, bleaching], slices[2]), 
+                ([imaging], slices[3])
               )
   
     return stages
@@ -98,10 +104,10 @@ function bleaching_stages(bleach_mask, imaging_mask, bath::BathParams{T}) where 
 end
 
 
-function ffts(ξ²::Array{T, 2}, ds) where {T <: Real}
+function ffts(ξ²::Array{T, 2}, ds, cpu_or_gpu::Function) where {T <: Real}
 
-    plan     = zeros(T, size(ξ²)) # |> device
-    inv_plan = zeros(Complex{T},ds) # |> device
+    plan     = zeros(T, size(ξ²)) |> cpu_or_gpu
+    inv_plan = zeros(Complex{T},ds) |> cpu_or_gpu
 
     P = plan_rfft(plan) 
     P̂ = plan_irfft(inv_plan, size(plan, 1)) 
@@ -110,11 +116,11 @@ function ffts(ξ²::Array{T, 2}, ds) where {T <: Real}
 
 end
 
-function add_noise(c, a, b)
+function noise(a, b, dims)
 
-    gaussian = randn(size(c)) # |> device
+    gaussian = randn(dims)
 
-    return c .+ sqrt.(a.+b.*c).*gaussian
+    return sqrt(a+b)*gaussian
 
 end
 
@@ -126,22 +132,22 @@ function evolve!(mobile::AbstractArray{T, 3},
 
 
     # Initial concentration before diffusion
-    c_mobile   = mobile[:, :, first(frames)]
-    c_immobile = immobile[:, :, first(frames)]
+    mobile_frame   = mobile[:, :, first(frames)]
+    immobile_frame = immobile[:, :, first(frames)]
 
     # Diffuse for n_frames timesteps
     for frame in frames
 
         # Make one step of length δt
-        c_mobile .= diffuse!(A, c_mobile, ĉ, P, P̂)
+        mobile_frame .= diffuse!(A, mobile_frame, ĉ, P, P̂)
 
         # Apply imaging bleach masks
-        c_mobile    .= bleach!(c_mobile, masks)
-        c_immobile  .= bleach!(c_immobile, masks)
+        mobile_frame    .= bleach!(mobile_frame, masks)
+        immobile_frame  .= bleach!(immobile_frame, masks)
 
         # Save time evolution
-        mobile[:, :, frame+1]   = c_mobile
-        immobile[:, :, frame+1] = c_immobile
+        mobile[:, :, frame+1]   = mobile_frame
+        immobile[:, :, frame+1] = immobile_frame
 
     end
 
