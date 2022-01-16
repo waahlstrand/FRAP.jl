@@ -46,15 +46,12 @@ function main()
                                       n_prebleach_frames, n_bleach_frames, n_postbleach_frames)
 
     @info "Generating signal..."
-    c = signal(experiment, bath)
+    c = signal(experiment, bath) |> Array
     @info "Signal generated!"
 
     @info "Calculating recovery curve..."
     rc = recovery_curve(c, bath) 
     @info "Recovery curve done!"
-
-    c = c |> Array
-    rc = rc |> Array
 
     @info "Creating animation..."
     animation = @animate for i in 1:size(c, 3)
