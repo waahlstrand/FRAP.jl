@@ -30,3 +30,4 @@ create_bleach_mask_rect.jl
 
 # No need to save the images
 /images
+/tests/images

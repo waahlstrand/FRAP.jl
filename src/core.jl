@@ -62,7 +62,7 @@ function signal(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:
 
     # Add noise
     n = noise(experiment.a, experiment.b, size(c)) |> cpu_or_gpu
-    c = sqrt.(c).*n
+    c = c .+ sqrt.(c).*n
 
     return c
     
@@ -116,9 +116,9 @@ function ffts(ξ²::Array{T, 2}, ds, cpu_or_gpu::Function) where {T <: Real}
 
 end
 
-function noise(a, b, dims)
+function noise(a::T, b::T, dims) where {T<:Real}
 
-    gaussian = randn(dims)
+    gaussian = randn(T, dims)
 
     return sqrt(a+b)*gaussian
 
