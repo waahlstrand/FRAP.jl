@@ -1,6 +1,5 @@
 module FRAP
     
-    include("device.jl")
     include("concentration.jl")
     include("mask.jl")
     include("params.jl")
@@ -8,14 +7,13 @@ module FRAP
     include("fit.jl")
     include("recovery.jl")
 
-    export cpu, gpu
-    export run
+    export signal
     export concentration
     export ExperimentParams, BathParams
     export AbstractROI, CircleROI, RectangleROI
     export diffuse!, evolve!
-    export create_fourier_grid
-    export create_imaging_bleach_mask, create_bleach_mask, create_bleach_region
+    export fourier_grid
+    export imaging_mask, bleaching_mask, region_of_interest
     export recovery_curve
     export residual
 

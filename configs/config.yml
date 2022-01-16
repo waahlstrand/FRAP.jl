@@ -8,6 +8,7 @@ experiment:
   gamma: 0.0
   constant variance: 0.2
   linear variance: 0.0
+  device: gpu
 
 bath: 
   number of pixels: 256

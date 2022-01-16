@@ -7,7 +7,7 @@ function residual(c::AbstractArray{T, 3}, experiment, bath, rng) where {T<:Real}
     experiment.b = 0
 
     # Calculate a model signal
-    c̃ = FRAP.run(experiment, bath, rng) |> cpu
+    c̃ = FRAP.run(experiment, bath, rng) 
 
     # Calculate residuals
     r = residual(c, c̃)
@@ -22,7 +22,7 @@ function residual(rc::AbstractArray{T, 1}, experiment, bath, rng) where {T<:Real
 
     # Calculate a model signal
     c̃ = FRAP.run(experiment, bath, rng)
-    rc̃ = FRAP.recovery_curve(c̃, bath) |> cpu
+    rc̃ = FRAP.recovery_curve(c̃, bath) 
 
     # Calculate 
     r = residual(rc, rc̃)

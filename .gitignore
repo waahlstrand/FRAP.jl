@@ -27,3 +27,6 @@ Manifest.toml
 *.log
 create_bleach_mask.jl
 create_bleach_mask_rect.jl
+
+# No need to save the images
+/images

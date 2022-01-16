@@ -14,23 +14,8 @@ using YAML
 
     a::Union{T, Array{T,1}}
     b::T
+    device::String
 
-end
-
-function ExperimentParams(pixel_size::T; 
-                          c₀::Union{T, Array{T,1}}, 
-                          ϕₘ::T, 
-                          D::Union{T, Array{T,1}}, 
-                          δt::T, 
-                          α::Union{T, Array{T,1}}, 
-                          β::T, 
-                          γ::T, 
-                          a::Union{T, Array{T,1}}, 
-                          b::T) where T <: Real
-
-    D = D ./ pixel_size^2
-
-    return ExperimentParams{T}(c₀=c₀, ϕₘ=ϕₘ, D=D, δt=δt, α=α, β=β, γ=γ, a=a, b=b)
 end
 
 struct BathParams{T<:Real, S<:Integer, R<:FRAP.AbstractROI{<:Real}}
@@ -44,6 +29,7 @@ struct BathParams{T<:Real, S<:Integer, R<:FRAP.AbstractROI{<:Real}}
     n_frames::S             
     n_elements::S
     ROI::R
+    ROI_pad::R
     ξ²::Array{T, 2}
 
     
@@ -62,9 +48,9 @@ function BathParams(x::T, y::T, r::T;
 
 
     r /= pixel_size
-
-    ROI = FRAP.create_bleach_region(x, y, r)
-    ξ² = convert(Array{T, 2}, FRAP.create_fourier_grid(n_elements))
+    ROI_pad = FRAP.region_of_interest(x+n_pad_pixels, y+n_pad_pixels, r)
+    ROI = FRAP.region_of_interest(x, y, r)
+    ξ² = convert(Array{T, 2}, FRAP.fourier_grid(n_elements))
 
     return BathParams(n_pixels, 
             n_pad_pixels, 
@@ -75,6 +61,7 @@ function BathParams(x::T, y::T, r::T;
             n_frames,
             n_elements, 
             ROI, 
+            ROI_pad,
             ξ²) 
 
 end
@@ -93,11 +80,12 @@ function BathParams(x::T, y::T, lx::T, ly::T;
     lx /= pixel_size
     ly /= pixel_size
 
-    # ROI = FRAP.create_bleach_region(x+n_pad_pixels, y+n_pad_pixels, lx, ly)
+    # ROI = FRAP.region_of_interest(x+n_pad_pixels, y+n_pad_pixels, lx, ly)
     # ξ² = FRAP.create_fourier_grid(n_elements)
 
-    ROI = FRAP.create_bleach_region(x, y, lx, ly)
-    ξ² = convert(Array{T, 2}, FRAP.create_fourier_grid(n_elements))
+    ROI_pad = FRAP.region_of_interest(x+n_pad_pixels, y+n_pad_pixels, lx, ly)
+    ROI = FRAP.region_of_interest(x, y, lx, ly)
+    ξ² = convert(Array{T, 2}, FRAP.fourier_grid(n_elements))
 
     return BathParams(n_pixels, 
             n_pad_pixels, 
@@ -108,6 +96,7 @@ function BathParams(x::T, y::T, lx::T, ly::T;
             n_frames,
             n_elements,
             ROI, 
+            ROI_pad,
             ξ²)
 
 end
@@ -135,8 +124,7 @@ function from_config(file :: String; type = Float32)
     bath_args["pixel size"] = convert(type, bath_args["pixel size"])
 
 
-    experiment = FRAP.ExperimentParams(bath_args["pixel size"];
-                                       c₀ = exp_args["initial concentration"],
+    experiment = FRAP.ExperimentParams(c₀ = exp_args["initial concentration"],
                                        ϕₘ = exp_args["mobile fraction"],
                                        D = exp_args["diffusion coefficient"],
                                        δt = exp_args["timestep"],
@@ -144,7 +132,8 @@ function from_config(file :: String; type = Float32)
                                        β = exp_args["imaging bleach"],
                                        γ = exp_args["gamma"],
                                        a = exp_args["constant variance"],
-                                       b = exp_args["linear variance"])
+                                       b = exp_args["linear variance"],
+                                       device = exp_args["device"])
 
     bath = FRAP.BathParams(bath_args["x center"],
                            bath_args["y center"],
