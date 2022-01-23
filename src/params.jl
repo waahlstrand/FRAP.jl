@@ -113,6 +113,9 @@ function from_config(file :: String; type = Float32)
     for (k, v) in exp_args
         if typeof(v) <: AbstractArray
             exp_args[k] = convert(Array{type,1}, v)
+        
+        elseif typeof(v) <: AbstractString
+            exp_args[k] = v
         else
             exp_args[k] = convert(type, v)
         end
