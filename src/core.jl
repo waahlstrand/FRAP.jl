@@ -7,19 +7,7 @@ using Random
 function signal(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
 
     # Select device
-    if CUDA.functional() && experiment.device == "gpu"
-        cpu_or_gpu = function(x::AbstractArray) 
-            return CuArray(x)
-        end
-    elseif (experiment.device == "cpu")
-        cpu_or_gpu = function(x::AbstractArray) 
-            return x
-        end    else 
-        @warn "Invalid device; falling back on cpu."
-        cpu_or_gpu = function(x::AbstractArray) 
-            return x
-        end    
-    end
+    cpu_or_gpu = device(experiment.device)
 
 
     # Rescale the diffusion coefficient from SI to per pixel²
