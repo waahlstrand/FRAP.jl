@@ -6,6 +6,7 @@ module FRAP
     include("core.jl")
     include("fit.jl")
     include("recovery.jl")
+    include("utils.jl")
 
     export signal
     export concentration
@@ -16,5 +17,6 @@ module FRAP
     export imaging_mask, bleaching_mask, region_of_interest
     export recovery_curve
     export residual
+    export device
 
 end
