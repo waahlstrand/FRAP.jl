@@ -1,14 +1,13 @@
-using LinearAlgebra
-using CUDA, CUDA.CUFFT
+using LinearAlgebra: mul!
+using CUDA
+using CUDA.CUFFT
 using FFTW
 using Random
-
 
 function signal(experiment::ExperimentParams{T}, bath::BathParams{T}) where {T<:Real}
 
     # Select device
     cpu_or_gpu = device(experiment.device)
-
 
     # Rescale the diffusion coefficient from SI to per pixel²
     Dₚ  = experiment.D / bath.pixel_size^2 

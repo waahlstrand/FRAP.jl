@@ -38,16 +38,17 @@ function main()
     γ::Float32 = 0.0
     a::Float32 = 0.02
     b::Float32 = 0.0
+    device::String = "gpu"
 
     #############################################
     # Run the experiment
 
-    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b, device="cpu")
+    experiment  = ExperimentParams(; c₀, ϕₘ, D=D_SI, δt, α, β, γ, a, b, device=device)
     bath        = BathParams(x, y, r; n_pixels, n_pad_pixels, pixel_size, 
                                       n_prebleach_frames, n_bleach_frames, n_postbleach_frames)
 
     @info "Generating signal..."
-    c = signal(experiment, bath) 
+    c = signal(experiment, bath) |> Array
     @info "Signal generated!"
 
     @info "Calculating recovery curve..."
